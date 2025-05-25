@@ -1,0 +1,5 @@
+fastapi
+uvicorn[standard]
+wxauto
+fastmcp
+python-dotenv # For potential configuration
