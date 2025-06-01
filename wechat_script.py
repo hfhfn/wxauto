@@ -11,6 +11,7 @@ wx = WeChat()
 
 # Global configuration
 MESSAGE_MONITOR_INTERVAL_SECONDS = 5  # Default interval for message checking: 5 seconds
+BOT_MENTION_NAME = "@botname"  # IMPORTANT: User should change this to the bot's actual mention name in WeChat
 
 
 # 消息状态跟踪
@@ -132,10 +133,18 @@ def message_monitor():
 
 def handle_message(msg: dict):
     """
-    Processes a single incoming message.
+    Processes a single incoming WeChat message based on @mentions.
 
-    Ignores messages sent by the bot itself (identified by wx.nickname).
-    Provides example reply logic based on message content.
+    The primary trigger for a reply is the presence of `BOT_MENTION_NAME`
+    (a global variable, e.g., "@botname") in the message content.
+
+    - If `BOT_MENTION_NAME` is found:
+        The message is processed for a potential reply. (Current logic is example-based).
+    - If `BOT_MENTION_NAME` is NOT found:
+        - If the message is from the bot itself (`msg['sender'] == wx.nickname`),
+          it is ignored to prevent processing echoes of its own statements.
+        - If the message is from another sender and does not contain the mention,
+          it is also ignored.
 
     Args:
         msg (dict): A dictionary containing message details:
@@ -147,24 +156,35 @@ def handle_message(msg: dict):
     """
     # msg format: {"who": chat_name, "sender": sender_in_chat, "message": content, "time": time, "msgid": msg_id}
 
-    # 检查消息是否来自自己，如果是则忽略
-    if msg['sender'] == wx.nickname:
-        print(f"消息来自自己 ({wx.nickname})，发往 '{msg['who']}'，内容：'{msg['message']}'，已忽略。")
+    actual_message_content = msg["message"]
+    sender_is_self = msg['sender'] == wx.nickname
+
+    if BOT_MENTION_NAME in actual_message_content:
+        print(f"Bot was mentioned by {msg['sender']} in chat {msg['who']}: \"{actual_message_content}\". Processing for reply...")
+
+        reply = None
+        content_lower = actual_message_content.lower() # Use the actual message content
+
+        if "hello" in content_lower or "你好" in content_lower:
+            reply = f"Hello {msg['sender']}! You mentioned me in {msg['who']} with '{actual_message_content}'."
+        elif "时间" in content_lower:
+            reply = f"Mentioned about time! The current time is {time.strftime('%H:%M:%S')}."
+        else:
+            reply = f"You mentioned me, {msg['sender']}, in {msg['who']}! Message: '{actual_message_content}'. How can I help?"
+
+        if reply:
+            send_text(msg["who"], reply)
+            print(f"Replied to @mention from {msg['sender']} in {msg['who']}")
+
+    elif sender_is_self:
+        # Message is from self, but NO @mention was found.
+        print(f"Ignoring self-sent message without @mention from {msg['sender']} in chat {msg['who']}: \"{actual_message_content}\"")
         return
 
-    print(f"新消息来自 {msg['who']} (实际发送者: {msg['sender']}): {msg['message']}")
-
-    # 示例回复逻辑
-    reply = None
-    content = msg["message"].lower()
-
-    if "hello" in content or "你好" in content:
-        reply = f"{msg['who']}你好！我是自动回复"
-    elif "时间" in content:
-        reply = time.strftime("现在是%H:%M:%S")
-
-    if reply:
-        send_text(msg["who"], reply)
+    else:
+        # Message is from someone else, and NO @mention was found.
+        print(f"Ignoring message from {msg['sender']} in chat {msg['who']} (no @mention): \"{actual_message_content}\"")
+        return
 
 
 # 文档标准消息发送
