@@ -172,18 +172,23 @@ def message_monitor():
 
 def handle_message(msg: dict):
     """
-    Processes a single incoming WeChat message based on @mentions.
+    Processes a single incoming WeChat message.
 
-    The primary trigger for a reply is the presence of `BOT_MENTION_NAME`
-    (a global variable, e.g., "@botname") in the message content.
+    The function first checks if the message is from the bot itself.
+    Replies are primarily triggered by the presence of `BOT_MENTION_NAME`
+    (a global variable, e.g., "@botname") in the message content,
+    with specific handling for self-sent messages.
 
-    - If `BOT_MENTION_NAME` is found:
-        The message is processed for a potential reply. (Current logic is example-based).
-    - If `BOT_MENTION_NAME` is NOT found:
-        - If the message is from the bot itself (`msg['sender'] == wx.nickname`),
-          it is ignored to prevent processing echoes of its own statements.
-        - If the message is from another sender and does not contain the mention,
-          it is also ignored.
+    1.  **If the message is from the bot itself (`msg['sender'] == wx.nickname`):**
+        -   It checks if `BOT_MENTION_NAME` is also in the message.
+            If yes (intentional self-mention), a reply is generated.
+        -   Otherwise (self-message without a mention, likely an echo of a
+            previous bot reply or a non-triggering message), it is ignored.
+
+    2.  **If the message is from another sender:**
+        -   It checks if `BOT_MENTION_NAME` is in the message.
+            If yes, a reply is generated.
+        -   Otherwise (message from another user without a mention), it is ignored.
 
     Args:
         msg (dict): A dictionary containing message details:
@@ -197,33 +202,47 @@ def handle_message(msg: dict):
 
     actual_message_content = msg["message"]
     sender_is_self = msg['sender'] == wx.nickname
+    reply = None # Initialize reply for all paths that might use it
+    content_lower = actual_message_content.lower() # Lowercase once for efficiency
 
-    if BOT_MENTION_NAME in actual_message_content:
-        print(f"Bot was mentioned by {msg['sender']} in chat {msg['who']}: \"{actual_message_content}\". Processing for reply...")
+    if sender_is_self:
+        # Message is from the bot itself
+        if BOT_MENTION_NAME in actual_message_content:
+            print(f"Self-mention detected by {msg['sender']} in chat {msg['who']}: \"{actual_message_content}\". Processing for reply...")
+            # Example reply logic for self-mention
+            if "hello" in content_lower or "你好" in content_lower:
+                reply = f"You mentioned me (yourself, {msg['sender']})! Hello back from {msg['who']}."
+            elif "时间" in content_lower:
+                reply = f"You (self) asked for the time. It is {time.strftime('%H:%M:%S')}."
+            else:
+                reply = f"Self-mention: '{actual_message_content}'. Acknowledged."
 
-        reply = None
-        content_lower = actual_message_content.lower() # Use the actual message content
-
-        if "hello" in content_lower or "你好" in content_lower:
-            reply = f"Hello {msg['sender']}! You mentioned me in {msg['who']} with '{actual_message_content}'."
-        elif "时间" in content_lower:
-            reply = f"Mentioned about time! The current time is {time.strftime('%H:%M:%S')}."
+            if reply:
+                send_text(msg["who"], reply)
+                print(f"Replied to self-mention from {msg['sender']} in {msg['who']}")
         else:
-            reply = f"You mentioned me, {msg['sender']}, in {msg['who']}! Message: '{actual_message_content}'. How can I help?"
-
-        if reply:
-            send_text(msg["who"], reply)
-            print(f"Replied to @mention from {msg['sender']} in {msg['who']}")
-
-    elif sender_is_self:
-        # Message is from self, but NO @mention was found.
-        print(f"Ignoring self-sent message without @mention from {msg['sender']} in chat {msg['who']}: \"{actual_message_content}\"")
-        return
-
+            # Self-message without self-mention
+            print(f"Ignoring self-sent message without @mention (likely echo) from {msg['sender']} in chat {msg['who']}: \"{actual_message_content}\"")
+            return
     else:
-        # Message is from someone else, and NO @mention was found.
-        print(f"Ignoring message from {msg['sender']} in chat {msg['who']} (no @mention): \"{actual_message_content}\"")
-        return
+        # Message is from another user
+        if BOT_MENTION_NAME in actual_message_content:
+            print(f"Mention from other user {msg['sender']} detected in chat {msg['who']}: \"{actual_message_content}\". Processing for reply...")
+            # Example reply logic for mention from others
+            if "hello" in content_lower or "你好" in content_lower:
+                reply = f"Hello {msg['sender']}! Thanks for mentioning me in {msg['who']}."
+            elif "时间" in content_lower:
+                reply = f"The current time, as requested by {msg['sender']}, is {time.strftime('%H:%M:%S')}."
+            else:
+                reply = f"Thanks for the mention, {msg['sender']}! You said: '{actual_message_content}'. How can I assist?"
+
+            if reply:
+                send_text(msg["who"], reply)
+                print(f"Replied to mention from {msg['sender']} in {msg['who']}")
+        else:
+            # Message from other user, no mention
+            print(f"Ignoring message from other user {msg['sender']} without @mention in chat {msg['who']}: \"{actual_message_content}\"")
+            return
 
 
 # 文档标准消息发送
