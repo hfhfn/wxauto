@@ -3,6 +3,11 @@ import threading
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from pydantic import BaseModel
 from wxauto import WeChat
+from wxauto.elements import SelfMessage, TimeMessage
+# Attempt to import SelfMessage and TimeMessage.
+# If other specific message classes like UserMessage, GroupChatMessage are known from elements.py,
+# they could be added too, but SelfMessage is confirmed from the debug log.
+# We'll start with these two for now.
 import os
 import uvicorn
 
@@ -66,7 +71,38 @@ def get_all_new_messages_from_wxauto():
 
         for chat_name, messages_list in new_messages_dict.items():
             for msg_entry in messages_list:
-                if isinstance(msg_entry, tuple):
+                if isinstance(msg_entry, SelfMessage):
+                    try:
+                        sender = msg_entry.Sender if hasattr(msg_entry, 'Sender') else wx.nickname
+                        content = msg_entry.Content if hasattr(msg_entry, 'Content') else str(msg_entry)
+                        time_val = msg_entry.Time if hasattr(msg_entry, 'Time') else "Unknown Time"
+                        # Ensure msgid is unique enough for potential future use if needed for deduplication
+                        msgid_fallback = f"selfmsg_{int(time.time() * 1000)}_{hash(content)}"
+                        msgid = msg_entry.MsgId if hasattr(msg_entry, 'MsgId') else msgid_fallback
+
+                        processed_messages.append({
+                            "who": chat_name,  # 'who' is the chat context (e.g., group name or other contact)
+                            "sender": sender,  # actual sender, which is self
+                            "message": content,
+                            "time": time_val,
+                            "msgid": msgid
+                        })
+                        print(f"[DEBUG] Processed SelfMessage from {sender} in chat {chat_name}: {content}")
+                    except AttributeError as e:
+                        print(f"[ERROR] AttributeError while processing SelfMessage object: {e}. Object: {msg_entry}")
+                    except Exception as e:
+                        print(f"[ERROR] Unexpected error while processing SelfMessage object: {e}. Object: {msg_entry}")
+
+                elif isinstance(msg_entry, TimeMessage):
+                    try:
+                        time_val = msg_entry.Time if hasattr(msg_entry, 'Time') else str(msg_entry)
+                        print(f"[DEBUG] Skipping TimeMessage object in chat {chat_name}: {time_val}")
+                    except AttributeError as e:
+                        print(f"[ERROR] AttributeError while processing TimeMessage object: {e}. Object: {msg_entry}")
+                    except Exception as e:
+                        print(f"[ERROR] Unexpected error while processing TimeMessage object: {e}. Object: {msg_entry}")
+
+                elif isinstance(msg_entry, tuple):
                     if len(msg_entry) == 4:
                         # Standard message tuple: (sender_in_chat, content, time, msg_id)
                         processed_messages.append({
@@ -76,12 +112,15 @@ def get_all_new_messages_from_wxauto():
                             "time": msg_entry[2],
                             "msgid": msg_entry[3]
                         })
+                    elif len(msg_entry) == 2:
+                        # Likely a time marker tuple (Datetime_object, msgid)
+                        print(f"[DEBUG] Skipping time marker tuple in chat {chat_name}: {msg_entry}")
                     else:
-                        # Other tuple types, e.g., time markers like (Datetime_object, msgid)
-                        print(f"[DEBUG] Skipping non-standard message tuple (e.g., time marker) in chat {chat_name}: {msg_entry}")
+                        # Other non-standard tuples
+                        print(f"[DEBUG] Skipping non-standard message tuple of length {len(msg_entry)} in chat {chat_name}: {msg_entry}")
                 else:
-                    # Non-tuple entries, potentially custom objects like TimeMessage
-                    print(f"[DEBUG] Skipping non-tuple message entry of type {type(msg_entry)} in chat {chat_name}: {msg_entry}")
+                    # Fallback for any other types not explicitly handled
+                    print(f"[DEBUG] Skipping unknown message entry type {type(msg_entry)} in chat {chat_name}: {msg_entry}")
 
         return processed_messages
     except Exception as e:
