@@ -9,6 +9,9 @@ import uvicorn
 app = FastAPI(title="WeChat Automation Service")
 wx = WeChat()
 
+# Global configuration
+MESSAGE_MONITOR_INTERVAL_SECONDS = 5  # Default interval for message checking: 5 seconds
+
 
 # 消息状态跟踪
 class MessageTracker:
@@ -61,18 +64,23 @@ def get_all_new_messages_from_wxauto():
             return []
 
         for chat_name, messages_list in new_messages_dict.items():
-            for msg_tuple in messages_list:
-                # msg_tuple: (sender_in_chat, content, time, msg_id)
-                if len(msg_tuple) == 4: # Ensure tuple has all expected elements
-                    processed_messages.append({
-                        "who": chat_name,
-                        "sender": msg_tuple[0],
-                        "message": msg_tuple[1],
-                        "time": msg_tuple[2],
-                        "msgid": msg_tuple[3]
-                    })
+            for msg_entry in messages_list:
+                if isinstance(msg_entry, tuple):
+                    if len(msg_entry) == 4:
+                        # Standard message tuple: (sender_in_chat, content, time, msg_id)
+                        processed_messages.append({
+                            "who": chat_name,
+                            "sender": msg_entry[0],
+                            "message": msg_entry[1],
+                            "time": msg_entry[2],
+                            "msgid": msg_entry[3]
+                        })
+                    else:
+                        # Other tuple types, e.g., time markers like (Datetime_object, msgid)
+                        print(f"[DEBUG] Skipping non-standard message tuple (e.g., time marker) in chat {chat_name}: {msg_entry}")
                 else:
-                    print(f"[WARNING] Malformed message tuple in chat {chat_name}: {msg_tuple}")
+                    # Non-tuple entries, potentially custom objects like TimeMessage
+                    print(f"[DEBUG] Skipping non-tuple message entry of type {type(msg_entry)} in chat {chat_name}: {msg_entry}")
 
         return processed_messages
     except Exception as e:
@@ -119,7 +127,7 @@ def message_monitor():
                     handle_message(msg)
         except Exception as e:
             print(f"[ERROR] 监听服务异常: {e}")
-        time.sleep(1)
+        time.sleep(MESSAGE_MONITOR_INTERVAL_SECONDS)
 
 
 def handle_message(msg: dict):
