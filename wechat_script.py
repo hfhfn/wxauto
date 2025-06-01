@@ -61,50 +61,59 @@ def get_all_new_messages_from_wxauto():
               }
               如果获取消息失败或没有新消息，则返回空列表。
     """
+    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_all_new_messages_from_wxauto: Function called.")
     processed_messages = []
     try:
-        # wx.GetAllNewMessage() 返回格式: {chat_name: [(sender_in_chat, content, time, msg_id), ...]}
         new_messages_dict = wx.GetAllNewMessage()
+        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_all_new_messages_from_wxauto: wx.GetAllNewMessage() returned: {new_messages_dict}")
 
         if not new_messages_dict:
+            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_all_new_messages_from_wxauto: wx.GetAllNewMessage() returned empty or None.")
             return []
 
+        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_all_new_messages_from_wxauto: Processing new_messages_dict. Keys: {list(new_messages_dict.keys()) if new_messages_dict else 'None'}")
+
         for chat_name, messages_list in new_messages_dict.items():
+            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_all_new_messages_from_wxauto: Processing messages for chat: '{chat_name}'")
+            if not messages_list:
+                print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_all_new_messages_from_wxauto: No messages in list for chat '{chat_name}'.")
+                continue
+
             for msg_entry in messages_list:
+                print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_all_new_messages_from_wxauto: Raw msg_entry for chat '{chat_name}': {msg_entry} (type: {type(msg_entry)})")
+
                 if isinstance(msg_entry, SelfMessage):
                     try:
                         sender = msg_entry.Sender if hasattr(msg_entry, 'Sender') else wx.nickname
                         content = msg_entry.Content if hasattr(msg_entry, 'Content') else str(msg_entry)
                         time_val = msg_entry.Time if hasattr(msg_entry, 'Time') else "Unknown Time"
-                        # Ensure msgid is unique enough for potential future use if needed for deduplication
-                        msgid_fallback = f"selfmsg_{int(time.time() * 1000)}_{hash(content)}"
+                        msgid_fallback = f"selfmsg_{int(time.time() * 1000)}_{hash(str(msg_entry))}"
                         msgid = msg_entry.MsgId if hasattr(msg_entry, 'MsgId') else msgid_fallback
 
                         processed_messages.append({
-                            "who": chat_name,  # 'who' is the chat context (e.g., group name or other contact)
-                            "sender": sender,  # actual sender, which is self
+                            "who": chat_name,
+                            "sender": sender,
                             "message": content,
                             "time": time_val,
                             "msgid": msgid
                         })
-                        print(f"[DEBUG] Processed SelfMessage from {sender} in chat {chat_name}: {content}")
+                        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_all_new_messages_from_wxauto: [DEBUG] Processed SelfMessage from {sender} in {chat_name}: {content}")
                     except AttributeError as e:
-                        print(f"[ERROR] AttributeError while processing SelfMessage object: {e}. Object: {msg_entry}")
+                        print(f"[ERROR] [{time.strftime('%Y-%m-%d %H:%M:%S')}] get_all_new_messages_from_wxauto: AttributeError while processing SelfMessage: {e}. Object: {msg_entry}")
                     except Exception as e:
-                        print(f"[ERROR] Unexpected error while processing SelfMessage object: {e}. Object: {msg_entry}")
+                        print(f"[ERROR] [{time.strftime('%Y-%m-%d %H:%M:%S')}] get_all_new_messages_from_wxauto: Unexpected error processing SelfMessage: {e}. Object: {msg_entry}")
 
                 elif isinstance(msg_entry, TimeMessage):
                     try:
                         time_val = msg_entry.Time if hasattr(msg_entry, 'Time') else str(msg_entry)
-                        print(f"[DEBUG] Skipping TimeMessage object in chat {chat_name}: {time_val}")
+                        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_all_new_messages_from_wxauto: [DEBUG] Skipping TimeMessage object in chat {chat_name}: {time_val}")
                     except AttributeError as e:
-                        print(f"[ERROR] AttributeError while processing TimeMessage object: {e}. Object: {msg_entry}")
+                        print(f"[ERROR] [{time.strftime('%Y-%m-%d %H:%M:%S')}] get_all_new_messages_from_wxauto: AttributeError while processing TimeMessage: {e}. Object: {msg_entry}")
                     except Exception as e:
-                        print(f"[ERROR] Unexpected error while processing TimeMessage object: {e}. Object: {msg_entry}")
+                        print(f"[ERROR] [{time.strftime('%Y-%m-%d %H:%M:%S')}] get_all_new_messages_from_wxauto: Unexpected error processing TimeMessage: {e}. Object: {msg_entry}")
 
                 elif isinstance(msg_entry, tuple):
                     if len(msg_entry) == 4:
-                        # Standard message tuple: (sender_in_chat, content, time, msg_id)
                         processed_messages.append({
                             "who": chat_name,
                             "sender": msg_entry[0],
@@ -112,19 +121,18 @@ def get_all_new_messages_from_wxauto():
                             "time": msg_entry[2],
                             "msgid": msg_entry[3]
                         })
+                        # Optional: print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_all_new_messages_from_wxauto: [DEBUG] Processed 4-elem tuple...")
                     elif len(msg_entry) == 2:
-                        # Likely a time marker tuple (Datetime_object, msgid)
-                        print(f"[DEBUG] Skipping time marker tuple in chat {chat_name}: {msg_entry}")
+                        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_all_new_messages_from_wxauto: [DEBUG] Skipping 2-elem time marker tuple in chat {chat_name}: {msg_entry}")
                     else:
-                        # Other non-standard tuples
-                        print(f"[DEBUG] Skipping non-standard message tuple of length {len(msg_entry)} in chat {chat_name}: {msg_entry}")
+                        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_all_new_messages_from_wxauto: [DEBUG] Skipping non-standard length tuple in chat {chat_name} (length {len(msg_entry)}): {msg_entry}")
                 else:
-                    # Fallback for any other types not explicitly handled
-                    print(f"[DEBUG] Skipping unknown message entry type {type(msg_entry)} in chat {chat_name}: {msg_entry}")
+                    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_all_new_messages_from_wxauto: [DEBUG] Skipping unknown message entry type {type(msg_entry)} in chat {chat_name}: {msg_entry}")
 
+        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_all_new_messages_from_wxauto: Function end. Returning {len(processed_messages)} processed messages.")
         return processed_messages
     except Exception as e:
-        print(f"[ERROR] 调用 wx.GetAllNewMessage() 失败: {e}")
+        print(f"[ERROR] [{time.strftime('%Y-%m-%d %H:%M:%S')}] get_all_new_messages_from_wxauto: Exception in function: {e}")
         return []
 
 
@@ -159,14 +167,30 @@ def switch_to_chat(who: str) -> bool:
 # 消息监听服务
 def message_monitor():
     """Continuously monitors for new WeChat messages and processes them."""
+    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] message_monitor: Thread started.") # Added when thread starts
     while True:
         try:
-            new_messages = get_all_new_messages_from_wxauto() # Call the new function
-            if new_messages:
-                for msg in new_messages: # Iterate through the list of messages
+            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] message_monitor: Loop start.") # Start of loop
+            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] message_monitor: Calling get_all_new_messages_from_wxauto...")
+
+            new_messages = get_all_new_messages_from_wxauto()
+
+            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] message_monitor: get_all_new_messages_from_wxauto returned: {new_messages}") # Log the returned value
+
+            if not new_messages: # Check if it's empty or None
+                print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] message_monitor: No new messages returned.")
+
+            if new_messages: # Ensure this block only runs if there are messages
+                for msg in new_messages:
+                    # print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] message_monitor: Processing message: {msg}") # Optional: can be very verbose
                     handle_message(msg)
+
+            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] message_monitor: Loop end, sleeping for {MESSAGE_MONITOR_INTERVAL_SECONDS}s...")
         except Exception as e:
-            print(f"[ERROR] 监听服务异常: {e}")
+            print(f"[ERROR] [{time.strftime('%Y-%m-%d %H:%M:%S')}] message_monitor: Exception in loop: {e}") # Enhanced error logging
+            # Potentially add a short sleep here too if errors are causing rapid looping
+            time.sleep(MESSAGE_MONITOR_INTERVAL_SECONDS) # Ensure sleep even on exception to avoid tight error loops
+
         time.sleep(MESSAGE_MONITOR_INTERVAL_SECONDS)
 
 
