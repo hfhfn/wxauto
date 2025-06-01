@@ -20,6 +20,7 @@ BOT_MENTION_NAME = "@botname"  # IMPORTANT: User should change this to the bot's
 # List of chat names to actively monitor using wx.AddListenChat()
 # The user should update this list with the exact names of the chats they want the bot to listen to.
 CHATS_TO_MONITOR = ["文件传输助手", "测试群"]
+SEND_MSG_DELAY_SECONDS = 1.5  # Delay in seconds after switching chat, before sending.
 
 
 # 消息状态跟踪
@@ -97,59 +98,68 @@ def get_new_messages_from_listened_chats():
                 print(f"[ERROR] [{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: Could not get chat name from object {chat_window_obj}: {e_chat_name}")
                 # Consider if continuing without a reliable chat_name is appropriate or if this chat should be skipped
 
+            # messages_list here is actually messages_outer_list from the prompt
             if not messages_list:
-                print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: No messages in list for chat '{chat_name}'.")
+                print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: No message entries in outer list for chat '{chat_name}'.")
                 continue
 
-            for msg_entry in messages_list:
-                print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: Raw msg_entry for chat '{chat_name}': {msg_entry} (type: {type(msg_entry)})")
+            for msg_entry_list in messages_list: # msg_entry_list is ['Self', 'content'] or ['SenderName', 'content']
+                print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: Raw msg_entry_list for chat '{chat_name}': {msg_entry_list} (type: {type(msg_entry_list)})")
 
-                if isinstance(msg_entry, SelfMessage):
+                if isinstance(msg_entry_list, list) and len(msg_entry_list) == 2:
+                    sender_identifier = msg_entry_list[0]
+                    message_content = msg_entry_list[1]
+
+                    actual_sender = wx.nickname if sender_identifier == 'Self' else sender_identifier
+
+                    timestamp = time.strftime('%Y-%m-%d %H:%M:%S') # Use current time as an approximation
+                    msg_id = f"listenmsg_{int(time.time() * 1000)}_{hash(message_content + actual_sender)}"
+
+                    processed_messages.append({
+                        "who": chat_name,
+                        "sender": actual_sender,
+                        "message": message_content,
+                        "time": timestamp,
+                        "msgid": msg_id
+                    })
+                    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: [DEBUG] Processed list-based message from '{actual_sender}' in '{chat_name}': {message_content}")
+
+                elif isinstance(msg_entry_list, SelfMessage):
+                    print(f"[WARNING] [{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: Received SelfMessage object unexpectedly from GetListenMessage in chat '{chat_name}'. Processing anyway.")
                     try:
-                        sender = msg_entry.Sender if hasattr(msg_entry, 'Sender') and msg_entry.Sender else wx.nickname
-                        content = msg_entry.Content if hasattr(msg_entry, 'Content') else str(msg_entry)
-                        time_val = msg_entry.Time if hasattr(msg_entry, 'Time') else "Unknown Time"
-                        msgid_fallback = f"selfmsg_{int(time.time() * 1000)}_{hash(str(msg_entry))}"
-                        msgid = msg_entry.MsgId if hasattr(msg_entry, 'MsgId') else msgid_fallback
+                        sender = msg_entry_list.Sender if hasattr(msg_entry_list, 'Sender') and msg_entry_list.Sender else wx.nickname
+                        content = msg_entry_list.Content if hasattr(msg_entry_list, 'Content') else str(msg_entry_list)
+                        time_val = msg_entry_list.Time if hasattr(msg_entry_list, 'Time') else "Unknown Time"
+                        msgid_fallback = f"selfmsg_{int(time.time() * 1000)}_{hash(str(msg_entry_list))}"
+                        msgid = msg_entry_list.MsgId if hasattr(msg_entry_list, 'MsgId') else msgid_fallback
+                        processed_messages.append({"who": chat_name, "sender": sender, "message": content, "time": time_val, "msgid": msgid})
+                        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: [DEBUG] Processed SelfMessage (unexpected) from {sender} in {chat_name}: {content}")
+                    except Exception as e_sm:
+                        print(f"[ERROR] [{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: Error processing unexpected SelfMessage: {e_sm}. Object: {msg_entry_list}")
 
-                        processed_messages.append({
-                            "who": chat_name,
-                            "sender": sender,
-                            "message": content,
-                            "time": time_val,
-                            "msgid": msgid
-                        })
-                        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: [DEBUG] Processed SelfMessage from {sender} in {chat_name}: {content}")
-                    except AttributeError as e:
-                        print(f"[ERROR] [{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: AttributeError while processing SelfMessage: {e}. Object: {msg_entry}")
-                    except Exception as e:
-                        print(f"[ERROR] [{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: Unexpected error processing SelfMessage: {e}. Object: {msg_entry}")
-
-                elif isinstance(msg_entry, TimeMessage):
+                elif isinstance(msg_entry_list, TimeMessage): # Should not be hit with GetListenMessage typical output
+                    print(f"[WARNING] [{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: Received TimeMessage object unexpectedly from GetListenMessage in chat '{chat_name}'. Skipping.")
                     try:
-                        time_val = msg_entry.Time if hasattr(msg_entry, 'Time') else str(msg_entry)
-                        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: [DEBUG] Skipping TimeMessage object in chat {chat_name}: {time_val}")
-                    except AttributeError as e:
-                        print(f"[ERROR] [{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: AttributeError while processing TimeMessage: {e}. Object: {msg_entry}")
-                    except Exception as e:
-                        print(f"[ERROR] [{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: Unexpected error processing TimeMessage: {e}. Object: {msg_entry}")
+                        time_val = msg_entry_list.Time if hasattr(msg_entry_list, 'Time') else str(msg_entry_list)
+                        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: [DEBUG] Unexpected TimeMessage object details: {time_val}")
+                    except Exception as e_tm:
+                         print(f"[ERROR] [{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: Error processing unexpected TimeMessage: {e_tm}. Object: {msg_entry_list}")
 
-                elif isinstance(msg_entry, tuple):
-                    if len(msg_entry) == 4:
+
+                elif isinstance(msg_entry_list, tuple): # Should not be hit with GetListenMessage typical output
+                    print(f"[WARNING] [{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: Received tuple unexpectedly from GetListenMessage in chat '{chat_name}': {msg_entry_list}")
+                    if len(msg_entry_list) == 4:
                         processed_messages.append({
-                            "who": chat_name, # Use resolved chat_name
-                            "sender": msg_entry[0],
-                            "message": msg_entry[1],
-                            "time": msg_entry[2],
-                            "msgid": msg_entry[3]
+                            "who": chat_name, "sender": msg_entry_list[0], "message": msg_entry_list[1],
+                            "time": msg_entry_list[2], "msgid": msg_entry_list[3]
                         })
-                        # Optional: print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: [DEBUG] Processed 4-elem tuple...")
-                    elif len(msg_entry) == 2:
-                        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: [DEBUG] Skipping 2-elem time marker tuple in chat {chat_name}: {msg_entry}")
+                        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: [DEBUG] Processed 4-elem tuple (unexpected).")
+                    elif len(msg_entry_list) == 2:
+                         print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: [DEBUG] Skipping 2-elem tuple (unexpected).")
                     else:
-                        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: [DEBUG] Skipping non-standard length tuple in chat {chat_name} (length {len(msg_entry)}): {msg_entry}")
+                        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: [DEBUG] Skipping non-standard length tuple (unexpected) (length {len(msg_entry_list)}).")
                 else:
-                    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: [DEBUG] Skipping unknown message entry type {type(msg_entry)} in chat {chat_name}: {msg_entry}")
+                    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: [DEBUG] Skipping unknown or unexpected message entry type {type(msg_entry_list)} in chat '{chat_name}': {msg_entry_list}")
 
         print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: Function end. Returning {len(processed_messages)} processed messages.")
         return processed_messages
@@ -298,7 +308,7 @@ def send_text(who: str, message: str):
     Sends a text message to the specified recipient.
 
     Ensures the chat with the recipient is active via switch_to_chat()
-    before attempting to send the message.
+    before attempting to send the message. Includes a delay after switching.
 
     Args:
         who (str): The name of the recipient (chat or contact).
@@ -306,6 +316,8 @@ def send_text(who: str, message: str):
     """
     try:
         if switch_to_chat(who):
+            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] send_text: Switched to chat '{who}', delaying for {SEND_MSG_DELAY_SECONDS}s before sending message...")
+            time.sleep(SEND_MSG_DELAY_SECONDS)
             wx.SendMsg(message)  # 文档标准发送方法
             print(f"已回复 {who}: {message}")
         else:
@@ -319,7 +331,7 @@ def send_file(who: str, filepath: str):
     Sends a file to the specified recipient.
 
     Ensures the chat with the recipient is active via switch_to_chat()
-    before attempting to send the file.
+    before attempting to send the file. Includes a delay after switching.
 
     Args:
         who (str): The name of the recipient (chat or contact).
@@ -327,6 +339,8 @@ def send_file(who: str, filepath: str):
     """
     try:
         if switch_to_chat(who):
+            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] send_file: Switched to chat '{who}', delaying for {SEND_MSG_DELAY_SECONDS}s before sending file...")
+            time.sleep(SEND_MSG_DELAY_SECONDS)
             wx.SendFiles(filepath)  # 文档标准文件发送
             print(f"Successfully sent file to {who}: {filepath}")
         else:
