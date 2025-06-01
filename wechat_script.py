@@ -103,63 +103,60 @@ def get_new_messages_from_listened_chats():
                 print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: No message entries in outer list for chat '{chat_name}'.")
                 continue
 
-            for msg_entry_list in messages_list: # msg_entry_list is ['Self', 'content'] or ['SenderName', 'content']
-                print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: Raw msg_entry_list for chat '{chat_name}': {msg_entry_list} (type: {type(msg_entry_list)})")
+            # Consistent variable name 'msg_entry' for items in messages_list
+            for msg_entry in messages_list:
+                print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: Raw msg_entry for chat '{chat_name}': {msg_entry} (type: {type(msg_entry)})")
 
-                if isinstance(msg_entry_list, list) and len(msg_entry_list) == 2:
-                    sender_identifier = msg_entry_list[0]
-                    message_content = msg_entry_list[1]
-
+                if isinstance(msg_entry, list) and len(msg_entry) == 2:
+                    sender_identifier = msg_entry[0]
+                    message_content = msg_entry[1]
                     actual_sender = wx.nickname if sender_identifier == 'Self' else sender_identifier
-
-                    timestamp = time.strftime('%Y-%m-%d %H:%M:%S') # Use current time as an approximation
-                    msg_id = f"listenmsg_{int(time.time() * 1000)}_{hash(message_content + actual_sender)}"
+                    timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+                    msg_id = f"listenmsg_list_{int(time.time() * 1000)}_{hash(message_content + actual_sender)}"
 
                     processed_messages.append({
-                        "who": chat_name,
-                        "sender": actual_sender,
-                        "message": message_content,
-                        "time": timestamp,
-                        "msgid": msg_id
+                        "who": chat_name, "sender": actual_sender, "message": message_content,
+                        "time": timestamp, "msgid": msg_id
                     })
-                    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: [DEBUG] Processed list-based message from '{actual_sender}' in '{chat_name}': {message_content}")
+                    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: [DEBUG] Processed list-based entry from '{actual_sender}' in '{chat_name}': {message_content}")
 
-                elif isinstance(msg_entry_list, SelfMessage):
-                    print(f"[WARNING] [{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: Received SelfMessage object unexpectedly from GetListenMessage in chat '{chat_name}'. Processing anyway.")
+                elif isinstance(msg_entry, SelfMessage):
                     try:
-                        sender = msg_entry_list.Sender if hasattr(msg_entry_list, 'Sender') and msg_entry_list.Sender else wx.nickname
-                        content = msg_entry_list.Content if hasattr(msg_entry_list, 'Content') else str(msg_entry_list)
-                        time_val = msg_entry_list.Time if hasattr(msg_entry_list, 'Time') else "Unknown Time"
-                        msgid_fallback = f"selfmsg_{int(time.time() * 1000)}_{hash(str(msg_entry_list))}"
-                        msgid = msg_entry_list.MsgId if hasattr(msg_entry_list, 'MsgId') else msgid_fallback
-                        processed_messages.append({"who": chat_name, "sender": sender, "message": content, "time": time_val, "msgid": msgid})
-                        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: [DEBUG] Processed SelfMessage (unexpected) from {sender} in {chat_name}: {content}")
-                    except Exception as e_sm:
-                        print(f"[ERROR] [{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: Error processing unexpected SelfMessage: {e_sm}. Object: {msg_entry_list}")
+                        sender = msg_entry.Sender if hasattr(msg_entry, 'Sender') and msg_entry.Sender else wx.nickname
+                        content = msg_entry.Content if hasattr(msg_entry, 'Content') else str(msg_entry)
+                        time_val = msg_entry.Time if hasattr(msg_entry, 'Time') else "Unknown Time"
+                        msgid_fallback = f"selfmsg_obj_{int(time.time() * 1000)}_{hash(str(msg_entry))}"
+                        msgid = msg_entry.MsgId if hasattr(msg_entry, 'MsgId') else msgid_fallback
 
-                elif isinstance(msg_entry_list, TimeMessage): # Should not be hit with GetListenMessage typical output
-                    print(f"[WARNING] [{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: Received TimeMessage object unexpectedly from GetListenMessage in chat '{chat_name}'. Skipping.")
-                    try:
-                        time_val = msg_entry_list.Time if hasattr(msg_entry_list, 'Time') else str(msg_entry_list)
-                        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: [DEBUG] Unexpected TimeMessage object details: {time_val}")
-                    except Exception as e_tm:
-                         print(f"[ERROR] [{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: Error processing unexpected TimeMessage: {e_tm}. Object: {msg_entry_list}")
-
-
-                elif isinstance(msg_entry_list, tuple): # Should not be hit with GetListenMessage typical output
-                    print(f"[WARNING] [{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: Received tuple unexpectedly from GetListenMessage in chat '{chat_name}': {msg_entry_list}")
-                    if len(msg_entry_list) == 4:
                         processed_messages.append({
-                            "who": chat_name, "sender": msg_entry_list[0], "message": msg_entry_list[1],
-                            "time": msg_entry_list[2], "msgid": msg_entry_list[3]
+                            "who": chat_name, "sender": sender, "message": content,
+                            "time": time_val, "msgid": msgid
                         })
-                        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: [DEBUG] Processed 4-elem tuple (unexpected).")
-                    elif len(msg_entry_list) == 2:
-                         print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: [DEBUG] Skipping 2-elem tuple (unexpected).")
+                        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: [DEBUG] Processed SelfMessage object from {sender} in {chat_name}: {content}")
+                    except Exception as e_sm:
+                        print(f"[ERROR] [{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: Error processing SelfMessage object: {e_sm}. Object: {msg_entry}")
+
+                elif isinstance(msg_entry, TimeMessage):
+                    try:
+                        time_val = msg_entry.Time if hasattr(msg_entry, 'Time') else str(msg_entry)
+                        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: [DEBUG] Skipping TimeMessage object in chat {chat_name}: {time_val}")
+                    except Exception as e_tm:
+                        print(f"[ERROR] [{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: Error processing TimeMessage object: {e_tm}. Object: {msg_entry}")
+
+                elif isinstance(msg_entry, tuple):
+                    if len(msg_entry) == 4:
+                        processed_messages.append({
+                            "who": chat_name, "sender": msg_entry[0], "message": msg_entry[1],
+                            "time": msg_entry[2], "msgid": msg_entry[3]
+                        })
+                        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: [DEBUG] Processed 4-elem tuple from chat {chat_name}.")
+                    elif len(msg_entry) == 2:
+                        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: [DEBUG] Skipping 2-elem time marker tuple in chat {chat_name}: {msg_entry}")
                     else:
-                        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: [DEBUG] Skipping non-standard length tuple (unexpected) (length {len(msg_entry_list)}).")
+                        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: [DEBUG] Skipping non-standard length tuple in chat {chat_name} (length {len(msg_entry)}): {msg_entry}")
+
                 else:
-                    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: [DEBUG] Skipping unknown or unexpected message entry type {type(msg_entry_list)} in chat '{chat_name}': {msg_entry_list}")
+                    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: [DEBUG] Skipping unknown or unhandled message entry type {type(msg_entry)} in chat '{chat_name}': {msg_entry}")
 
         print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] get_new_messages_from_listened_chats: Function end. Returning {len(processed_messages)} processed messages.")
         return processed_messages
@@ -318,6 +315,15 @@ def send_text(who: str, message: str):
         if switch_to_chat(who):
             print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] send_text: Switched to chat '{who}', delaying for {SEND_MSG_DELAY_SECONDS}s before sending message...")
             time.sleep(SEND_MSG_DELAY_SECONDS)
+            # Attempt to send ESC to clear potential pop-ups/menus
+            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] send_text: Sending ESC key to chat '{who}' to clear potential pop-ups...")
+            try:
+                wx.UiaAPI.SendKeys('{ESC}', waitTime=0.2)
+                print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] send_text: ESC key sent.")
+            except Exception as e_esc:
+                print(f"[WARNING] [{time.strftime('%Y-%m-%d %H:%M:%S')}] send_text: Failed to send ESC key: {e_esc}")
+            time.sleep(0.1) # Short delay for ESC to take effect
+
             wx.SendMsg(message)  # 文档标准发送方法
             print(f"已回复 {who}: {message}")
         else:
@@ -341,6 +347,15 @@ def send_file(who: str, filepath: str):
         if switch_to_chat(who):
             print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] send_file: Switched to chat '{who}', delaying for {SEND_MSG_DELAY_SECONDS}s before sending file...")
             time.sleep(SEND_MSG_DELAY_SECONDS)
+            # Attempt to send ESC to clear potential pop-ups/menus
+            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] send_file: Sending ESC key to chat '{who}' to clear potential pop-ups...")
+            try:
+                wx.UiaAPI.SendKeys('{ESC}', waitTime=0.2)
+                print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] send_file: ESC key sent.")
+            except Exception as e_esc:
+                print(f"[WARNING] [{time.strftime('%Y-%m-%d %H:%M:%S')}] send_file: Failed to send ESC key: {e_esc}")
+            time.sleep(0.1) # Short delay for ESC to take effect
+
             wx.SendFiles(filepath)  # 文档标准文件发送
             print(f"Successfully sent file to {who}: {filepath}")
         else:
